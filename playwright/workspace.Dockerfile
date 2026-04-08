@@ -28,11 +28,6 @@ LABEL version="1.0"
 WORKDIR /app
 
 ENV NODE_ENV=production
-ENV BASE_URL=http://onecx-shell-ui:8080/onecx-shell/admin/workspace
-ENV ONECX_USER=onecx
-ENV ONECX_PASSWORD=onecx
-ENV OUTPUT_DIR=/e2e-results
-ENV artifacts_ROOT=/e2e-results
 ENV RUN_ID=local
 ENV CI=true
 

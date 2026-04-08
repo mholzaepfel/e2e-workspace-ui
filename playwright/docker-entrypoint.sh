@@ -1,5 +1,5 @@
 #!/bin/bash
-set -e
+set -eo pipefail
 
 # ============================================================
 # OneCX E2E Test Container Entrypoint
@@ -109,5 +109,6 @@ log "=========================================="
 log ""
 
 # Execute the provided command (default: npm test)
-# tee writes output to stdout and the log file at the same time
-exec "$@" 2>&1 | tee -a "${LOG_FILE}"
+# tee writes output to stdout and the log file; pipefail ensures the exit
+# code comes from the test process, not from tee.
+"$@" 2>&1 | tee -a "${LOG_FILE}"
