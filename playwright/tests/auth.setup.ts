@@ -1,92 +1,142 @@
-import { test as setup, expect } from '@playwright/test'
-import * as fs from 'fs'
-import { KeycloakLoginHarness } from '../harnesses'
+import { test as setup } from "@playwright/test";
+import * as fs from "fs";
+import * as path from "path";
+import { KeycloakLoginHarness } from "../harnesses";
 
 /**
- * Authentication Setup für OneCX Tests
+ * Authentication setup for OneCX E2E tests.
  *
- * Dieser Setup-Test loggt sich über Keycloak ein und speichert den
- * Authentication State für nachfolgende Tests.
+ * This setup test signs in through Keycloak and stores authentication state
+ * (cookies, local/session storage) for dependent test projects.
  *
- * Environment Variables:
- * - KEYCLOAK_USER: Benutzername (default: admin)
- * - KEYCLOAK_PASSWORD: Passwort (default: admin)
- * - OUTPUT_DIR: Verzeichnis für Auth-State (default: /e2e-results)
+ * Environment variables:
+ * - BASE_URL: target URL
+ * - ONECX_USER: username
+ * - ONECX_PASSWORD: password
+ * - OUTPUT_DIR: output directory for auth state
  */
 
-const artefactsRoot = process.env.artefacts_ROOT || './artefacts'
-const runId = process.env.RUN_ID || 'local'
-const outputDir = process.env.OUTPUT_DIR || `${artefactsRoot}/runs/${runId}/e2e-results`
-const authFile = `${outputDir}/.auth/user.json`
+const artifactsRoot = process.env.artifacts_ROOT || "./artifacts";
+const runId = process.env.RUN_ID || "local";
+const outputDir =
+  process.env.OUTPUT_DIR || `${artifactsRoot}/runs/${runId}/e2e-results`;
+const authFile = `${outputDir}/.auth/user.json`;
+const authDir = path.dirname(authFile);
 
-fs.mkdirSync(`${outputDir}/.auth`, { recursive: true })
+if (!fs.existsSync(authDir)) {
+  fs.mkdirSync(authDir, { recursive: true });
+}
 
-setup('Keycloak Authentication', async ({ page }) => {
-  const username = process.env.KEYCLOAK_USER || 'onecx'
-  const password = process.env.KEYCLOAK_PASSWORD || 'onecx'
-  const baseURL = process.env.BASE_URL || 'http://proxy.localhost/onecx-shell/admin/'
+setup("Keycloak Authentication", async ({ page, baseURL }) => {
+  const username = process.env.ONECX_USER || "onecx";
+  const password = process.env.ONECX_PASSWORD || "onecx";
+  const targetUrl =
+    baseURL || "http://onecx.localhost/onecx-shell/admin/workspace";
 
-  console.log(`[Auth Setup] Navigiere zu: ${baseURL}`)
-  console.log(`[Auth Setup] Benutzer: ${username}`)
+  const waitForRealmRedirect = async (timeoutMs = 7000): Promise<boolean> => {
+    try {
+      await page.waitForURL((url) => url.href.includes("/realms/"), {
+        timeout: timeoutMs,
+      });
+      return true;
+    } catch {
+      return page.url().includes("/realms/");
+    }
+  };
 
-  // Navigiere zur Anwendung - wird zu Keycloak weitergeleitet
-  await page.goto(baseURL)
+  console.log("\n[Auth Setup] ========================================");
+  console.log("[Auth Setup] Starting Keycloak authentication");
+  console.log(`[Auth Setup] URL: ${targetUrl}`);
+  console.log(`[Auth Setup] User: ${username}`);
+  console.log(`[Auth Setup] Auth storage: ${authFile}`);
+  console.log("[Auth Setup] ========================================\n");
 
-  // Warte auf Keycloak Login-Seite
-  const keycloakHarness = new KeycloakLoginHarness(page)
-
-  // Prüfe ob wir auf der Keycloak-Seite sind
   try {
-    await keycloakHarness.waitForPage()
-    console.log('[Auth Setup] Keycloak Login-Seite geladen')
+    const keycloakHarness = new KeycloakLoginHarness(page);
 
-    // Realm-Name loggen
-    const realmName = await keycloakHarness.getRealmName()
-    console.log(`[Auth Setup] Realm: ${realmName}`)
+    await keycloakHarness.navigateTo(targetUrl);
+    const redirectedToRealm = await waitForRealmRedirect();
+    const loginPageVisible = await keycloakHarness.isVisible();
 
-    // Login durchführen
-    console.log('[Auth Setup] Führe Login durch...')
-    await keycloakHarness.login(username, password)
+    if (
+      redirectedToRealm ||
+      loginPageVisible ||
+      keycloakHarness.isInRealmFlow()
+    ) {
+      await keycloakHarness.waitForPage();
+      console.log("[Auth Setup] Keycloak login page detected");
 
-    // Warte auf Weiterleitung zur Anwendung
-    // Nach erfolgreichem Login sollte die URL nicht mehr Keycloak enthalten
-    await page.waitForURL((url) => !url.href.includes('/realms/'), {
-      timeout: 30000,
-    })
+      const realmName = await keycloakHarness.getRealmName();
+      console.log(`[Auth Setup] Realm: ${realmName}`);
 
-    console.log(`[Auth Setup] Redirect erfolgt, URL: ${page.url()}`)
+      console.log("[Auth Setup] Performing login...");
+      await keycloakHarness.login(username, password);
 
-    // WICHTIG: Warte bis die App den OAuth-Code verarbeitet hat
-    // Die URL enthält noch #code=... - warte bis das Fragment weg ist oder die App geladen ist
-    await page.waitForFunction(
-      () => {
-        // Prüfe ob die App geladen ist (kein code im Hash oder App-Element sichtbar)
-        const hash = window.location.hash
-        const hasCode = hash.includes('code=')
-        const appLoaded = document.querySelector('ocx-shell') || document.querySelector('app-root')
-        return !hasCode || appLoaded
-      },
-      { timeout: 15000 }
-    )
+      try {
+        await keycloakHarness.waitForRedirectAfterLogin();
+        console.log(
+          `[Auth Setup] Redirect successful, URL: ${keycloakHarness.getCurrentUrl()}`,
+        );
+      } catch {
+        const userError = await keycloakHarness.getUsernameErrorText();
+        const passwordError = await keycloakHarness.getPasswordErrorText();
+        throw new Error(
+          `Login required but redirect did not happen. Current URL: ${keycloakHarness.getCurrentUrl()} | usernameError: ${userError || "-"} | passwordError: ${passwordError || "-"}`,
+        );
+      }
 
-    // Warte auf vollständiges Laden
-    await page.waitForLoadState('domcontentloaded')
-    await page.waitForTimeout(2000) // Kurze Pause für SPA-Initialisierung
+      try {
+        await keycloakHarness.waitForOAuthProcessing();
+        console.log("[Auth Setup] OAuth code processed");
+      } catch {
+        console.log(
+          "[Auth Setup] OAuth code processing timed out (continuing)",
+        );
+      }
 
-    console.log(`[Auth Setup] Login erfolgreich, finale URL: ${page.url()}`)
+      await keycloakHarness.waitForAppReady();
+      console.log(
+        `[Auth Setup] Login successful, final URL: ${keycloakHarness.getCurrentUrl()}`,
+      );
+    } else {
+      console.log(
+        "[Auth Setup] Keycloak login not required on initial navigation",
+      );
+      console.log(
+        `[Auth Setup] Current URL: ${keycloakHarness.getCurrentUrl()}`,
+      );
+      await keycloakHarness.waitForAppReady();
+    }
+
+    // Hard validation: an authenticated state must not redirect to Keycloak anymore.
+    await keycloakHarness.navigateTo(targetUrl);
+    const redirectedAfterSetup = await waitForRealmRedirect();
+    if (redirectedAfterSetup || keycloakHarness.isInRealmFlow()) {
+      throw new Error(
+        `Authentication state is invalid - still redirected to Keycloak: ${keycloakHarness.getCurrentUrl()}`,
+      );
+    }
+
+    await keycloakHarness.waitForAppReady();
+    await page.waitForTimeout(1000);
+
+    console.log("[Auth Setup] Saving authentication state...");
+    await page.context().storageState({ path: authFile });
+    console.log(`[Auth Setup] Auth state saved: ${authFile}`);
+    console.log("[Auth Setup] Authentication successful\n");
   } catch (error) {
-    // Falls wir bereits eingeloggt sind (kein Keycloak-Redirect)
-    console.log('[Auth Setup] Kein Keycloak-Login erforderlich oder bereits eingeloggt')
-    console.log(`[Auth Setup] Error: ${error}`)
+    console.error(`[Auth Setup] Authentication failed: ${error}`);
+    console.error(`[Auth Setup] URL: ${page.url()}`);
+    console.error(
+      "[Auth Setup] Auth state will still be written for diagnostics\n",
+    );
+
+    try {
+      await page.context().storageState({ path: authFile });
+    } catch (storageError) {
+      console.error(`[Auth Setup] Auth state save failed: ${storageError}`);
+    }
+
+    throw error;
   }
-
-  // Warte auf domcontentloaded (networkidle kann bei Polling/WebSockets hängen)
-  await page.waitForLoadState('domcontentloaded')
-
-  // Zusätzliche Wartezeit für finale Initialisierung
-  await page.waitForTimeout(3000)
-
-  // Speichere den Authentication State
-  await page.context().storageState({ path: authFile })
-  console.log(`[Auth Setup] Auth-State gespeichert: ${authFile}`)
-})
+});

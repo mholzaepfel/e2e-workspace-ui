@@ -1,110 +1,141 @@
-import { defineConfig, devices } from '@playwright/test'
+import { defineConfig, devices } from "@playwright/test";
 
 /**
- * Playwright Konfiguration für OneCX E2E Tests
+ * Playwright configuration for OneCX E2E tests
  *
  * Environment Variables:
- * - BASE_URL: Ziel-URL der Anwendung (z.B. http://proxy.localhost/onecx-shell/admin/)
- * - KEYCLOAK_USER: Benutzername für Keycloak Login (default: admin)
- * - KEYCLOAK_PASSWORD: Passwort für Keycloak Login (default: admin)
- * - OUTPUT_DIR: Verzeichnis für Test-Ergebnisse (default: ./artefacts/runs/<runId>/e2e-results or /e2e-results in container)
+ * - BASE_URL: Target URL (for example: http://onecx.localhost/onecx-shell/admin/workspace)
+ * - ONECX_USER: Keycloak test username (default: onecx)
+ * - ONECX_PASSWORD: Keycloak test password (default: onecx)
+ * - LOCALE: Browser locale for tests (default: en-US)
+ * - UI_LANGUAGE: Accept-Language header value (default: en-US,en;q=0.9)
+ * - CI: Set to 'true' in CI pipelines (enables 2 retries)
+ * - OUTPUT_DIR: Test output directory (default: ./artifacts/runs/<runId>/e2e-results or /e2e-results)
+ * - EXPECT_TIMEOUT: Assertion timeout in ms (default: 10000)
+ * - TEST_TIMEOUT: Per-test timeout in ms (default: 30000)
  */
 
-const baseURL = process.env.BASE_URL || 'http://proxy.localhost/onecx-shell/admin/'
-const artefactsRoot = process.env.artefacts_ROOT || './artefacts'
-const runId = process.env.RUN_ID || 'local'
-const defaultOutputDir = `${artefactsRoot}/runs/${runId}/e2e-results`
-const outputDir = process.env.OUTPUT_DIR || defaultOutputDir
+const baseURL =
+  process.env.BASE_URL || "http://onecx.localhost/onecx-shell/admin/workspace";
+const artifactsRoot = process.env.artifacts_ROOT || "./artifacts";
+const runId = process.env.RUN_ID || "local";
+const defaultOutputDir = `${artifactsRoot}/runs/${runId}/e2e-results`;
+const outputDir = process.env.OUTPUT_DIR || defaultOutputDir;
+
+// Auth storage state path (use /tmp in container, outputDir locally)
+const authStoragePath = `${outputDir}/.auth/user.json`;
+
+// Trace, Video, Screenshot modes (configurable via env)
+const traceMode = (process.env.TRACE_MODE || "on-first-retry") as
+  | "on"
+  | "off"
+  | "on-first-retry";
+const screenshotMode = (process.env.SCREENSHOT_MODE || "only-on-failure") as
+  | "on"
+  | "off"
+  | "only-on-failure";
+
+// Timeouts (configurable via env)
+const expectTimeout = parseInt(process.env.EXPECT_TIMEOUT || "10000", 10);
+const testTimeout = parseInt(process.env.TEST_TIMEOUT || "30000", 10);
+const navigationTimeout = parseInt(
+  process.env.NAVIGATION_TIMEOUT || "15000",
+  10,
+);
+const actionTimeout = parseInt(process.env.ACTION_TIMEOUT || "10000", 10);
+const browserLocale = process.env.LOCALE || "en-US";
+const uiLanguage = process.env.UI_LANGUAGE || "en-US,en;q=0.9";
 
 export default defineConfig({
-  // Test-Verzeichnis
-  testDir: './tests',
+  // Test directory
+  testDir: "./tests",
 
-  // Globales Setup für Authentication
+  // Authentication setup project
   globalSetup: undefined,
 
-  // Parallele Ausführung deaktivieren für stabile Tests
+  // Disable full parallel mode for stable E2E behavior
   fullyParallel: false,
   workers: 1,
 
-  // Retry bei Fehlern
+  // Retries
   retries: process.env.CI ? 2 : 0,
 
-  // Reporter für Ausgabe
+  // Reporters
   reporter: [
-    ['html', { outputFolder: `${outputDir}/playwright-report`, open: 'never' }],
-    ['json', { outputFile: `${outputDir}/test-results.json` }],
-    ['list'],
+    ["html", { outputFolder: `${outputDir}/playwright-report`, open: "never" }],
+    ["json", { outputFile: `${outputDir}/test-results.json` }],
+    ["list"],
   ],
 
-  // Globale Timeouts
-  timeout: 30000, // 30 Sekunden pro Test
+  // Global timeouts
+  timeout: testTimeout,
   expect: {
-    timeout: 5000, // 5 Sekunden für Assertions
+    timeout: expectTimeout,
   },
 
-  // Output-Verzeichnis für Traces, Screenshots, Videos
-  outputDir: `${outputDir}/test-artefacts`,
+  // Output directory for traces/screenshots
+  outputDir: `${outputDir}/test-artifacts`,
 
-  // Gemeinsame Einstellungen für alle Projekte
+  // Shared settings for all projects
   use: {
     // Base URL
     baseURL,
 
-    // Tracing aktivieren (on-first-retry oder always)
-    trace: 'on',
+    // Tracing mode
+    trace: traceMode,
 
-    // Screenshots bei Fehlern
-    screenshot: 'on',
+    // Screenshot mode
+    screenshot: screenshotMode,
 
-    // Video-Aufnahme
-    video: 'on',
-
-    // Network-Logs sammeln (HAR-Datei)
-    // HAR wird durch trace bereits erfasst
+    // HAR is already included in Playwright trace artifacts
 
     // Viewport
     viewport: { width: 1920, height: 1080 },
 
-    // Navigation Timeout
-    navigationTimeout: 15000,
+    // Navigation timeout
+    navigationTimeout,
 
-    // Action Timeout
-    actionTimeout: 10000,
+    // Action timeout
+    actionTimeout,
 
-    // Ignoriere HTTPS-Fehler (für lokale Entwicklung)
+    // Ignore HTTPS errors (useful for local environments)
     ignoreHTTPSErrors: true,
 
-    // Locale für Tests
-    locale: 'de-DE',
+    // Locale for tests
+    locale: browserLocale,
+
+    // Helps the app pick the expected translation by default
+    extraHTTPHeaders: {
+      "Accept-Language": uiLanguage,
+    },
 
     // Timezone
-    timezoneId: 'Europe/Berlin',
+    timezoneId: "Europe/Berlin",
   },
 
-  // Projekte / Browser
+  // Projects / browser
   projects: [
-    // Setup-Projekt für Authentication
+    // Setup project for authentication
     {
-      name: 'setup',
+      name: "setup",
       testMatch: /.*\.setup\.ts/,
       use: {
-        ...devices['Desktop Chrome'],
+        ...devices["Desktop Chrome"],
       },
     },
 
-    // Hauptprojekt mit Chrome
+    // Main Chromium project
     {
-      name: 'chromium',
+      name: "chromium",
       use: {
-        ...devices['Desktop Chrome'],
-        // Authentication State von Setup verwenden
-        storageState: `${outputDir}/.auth/user.json`,
+        ...devices["Desktop Chrome"],
+        // Reuse authentication state from setup project
+        storageState: authStoragePath,
       },
-      dependencies: ['setup'],
+      dependencies: ["setup"],
     },
   ],
 
-  // Web Server nicht starten (wird extern bereitgestellt)
+  // No web server startup (target is provided externally)
   webServer: undefined,
-})
+});

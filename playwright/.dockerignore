@@ -3,6 +3,6 @@ dist/
 .auth/
 test-results/
 playwright-report/
-test-artefacts/
+test-artifacts/
 *.log
 .DS_Store

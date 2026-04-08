@@ -4,97 +4,110 @@ set -e
 # ============================================================
 # OneCX E2E Test Container Entrypoint
 # ============================================================
-# Dieses Skript führt die Playwright-Tests aus und stellt sicher,
-# dass alle Logs und Ergebnisse in das Output-Verzeichnis geschrieben werden.
+# Runs Playwright E2E tests and collects logs/results.
+# Exit code 0 = all tests passed
+# Exit code 1 = tests failed
 # ============================================================
 
-artefacts_ROOT="${artefacts_ROOT:-/e2e-results}"
+artifacts_ROOT="${artifacts_ROOT:-/e2e-results}"
 RUN_ID="${RUN_ID:-local}"
-OUTPUT_DIR="${OUTPUT_DIR:-${artefacts_ROOT}}"
+OUTPUT_DIR="${OUTPUT_DIR:-${artifacts_ROOT}}"
 LOG_FILE="${OUTPUT_DIR}/test-run.log"
 
-# Logging-Funktion
+# Ensure log directory exists
+mkdir -p "${OUTPUT_DIR}"
+
+# Logging function
 log() {
     local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
     echo "[${timestamp}] $1" | tee -a "${LOG_FILE}"
 }
 
-# Fehlerbehandlung
+# ============================================================
+# Startup
+# ============================================================
+
+log "=========================================="
+log "OneCX E2E Test Container — Startup"
+log "=========================================="
+log "BASE_URL: ${BASE_URL}"
+log "ONECX_USER: ${ONECX_USER:-${ONECX_USER:-onecx}}"
+log "OUTPUT_DIR: ${OUTPUT_DIR}"
+log "RUN_ID: ${RUN_ID}"
+log "CI: ${CI:-false}"
+log "=========================================="
+
+# Prepare output directories
+log "Preparing output directories..."
+mkdir -p "${OUTPUT_DIR}/screenshots"
+mkdir -p "${OUTPUT_DIR}/.auth"
+mkdir -p "${OUTPUT_DIR}/test-artifacts"
+mkdir -p "${OUTPUT_DIR}/playwright-report"
+
+# Simple BASE_URL reachability check (optional)
+if command -v curl &> /dev/null; then
+    log "Checking BASE_URL reachability..."
+    if ! curl -sf "${BASE_URL}" > /dev/null 2>&1; then
+        log "BASE_URL is not responding (this can be OK for auth redirects)"
+    else
+        log "BASE_URL is reachable"
+    fi
+fi
+
+# Version information
+log "Environment information:"
+log "  Node: $(node --version)"
+log "  NPM: $(npm --version)"
+log "  Playwright: $(node_modules/.bin/playwright --version 2>/dev/null || echo 'n/a')"
+
+# ============================================================
+# Error handling and cleanup
+# ============================================================
+
 cleanup() {
     local exit_code=$?
+    
     log "=========================================="
-    log "Test-Ausführung beendet mit Exit-Code: ${exit_code}"
+    log "Test execution finished - Exit code: ${exit_code}"
     log "=========================================="
     
-    # Zusammenfassung der Ergebnisse
+    # Results summary
     if [ -f "${OUTPUT_DIR}/test-results.json" ]; then
-        log "Test-Ergebnisse verfügbar: ${OUTPUT_DIR}/test-results.json"
+        log "Results file: test-results.json"
     fi
     
-    if [ -d "${OUTPUT_DIR}/playwright-report" ]; then
-        log "HTML-Report verfügbar: ${OUTPUT_DIR}/playwright-report/index.html"
+    if [ -d "${OUTPUT_DIR}/playwright-report" ] && [ -f "${OUTPUT_DIR}/playwright-report/index.html" ]; then
+        log "✓ HTML-Report: playwright-report/index.html"
     fi
     
-    if [ -d "${OUTPUT_DIR}/screenshots" ]; then
-        log "Screenshots verfügbar: ${OUTPUT_DIR}/screenshots/"
+    if [ -n "$(find "${OUTPUT_DIR}/test-artifacts" -type f 2>/dev/null)" ]; then
+        log "Test artifacts (traces/videos/screenshots): test-artifacts/"
     fi
     
-    if [ -d "${OUTPUT_DIR}/test-artefacts" ]; then
-        log "Test-artefacts (Videos, Traces): ${OUTPUT_DIR}/test-artefacts/"
+    if [ -f "${OUTPUT_DIR}/.auth/user.json" ]; then
+        log "Auth state: .auth/user.json"
     fi
     
-    log "Container wird beendet..."
+    log "=========================================="
+    log "All results available in: ${OUTPUT_DIR}"
+    log "Container exits with code: ${exit_code}"
+    log "=========================================="
+    
     exit ${exit_code}
 }
 
 trap cleanup EXIT
 
 # ============================================================
-# Hauptausführung
+# Main execution
 # ============================================================
 
+log ""
+log "Starting Playwright tests..."
+log "Command: $@"
 log "=========================================="
-log "OneCX E2E Test Container gestartet"
-log "=========================================="
-log "BASE_URL: ${BASE_URL}"
-log "KEYCLOAK_USER: ${KEYCLOAK_USER}"
-log "OUTPUT_DIR: ${OUTPUT_DIR}"
-log "=========================================="
+log ""
 
-# Verzeichnisse erstellen
-mkdir -p "${OUTPUT_DIR}/screenshots"
-mkdir -p "${OUTPUT_DIR}/.auth"
-mkdir -p "${OUTPUT_DIR}/test-artefacts"
-mkdir -p "${OUTPUT_DIR}/playwright-report"
-
-# Warte auf Netzwerk-Verfügbarkeit (optional)
-if [ -n "${WAIT_FOR_URL}" ]; then
-    log "Warte auf URL: ${WAIT_FOR_URL}"
-    timeout=60
-    while [ $timeout -gt 0 ]; do
-        if curl -s -o /dev/null -w "%{http_code}" "${WAIT_FOR_URL}" | grep -q "200\|302\|301"; then
-            log "URL ist erreichbar!"
-            break
-        fi
-        log "Warte... (${timeout}s verbleibend)"
-        sleep 5
-        timeout=$((timeout - 5))
-    done
-    
-    if [ $timeout -le 0 ]; then
-        log "FEHLER: URL nicht erreichbar nach Timeout"
-        exit 1
-    fi
-fi
-
-# Environment-Info loggen
-log "Node Version: $(node --version)"
-log "NPM Version: $(npm --version)"
-log "Playwright Version: $(node_modules/.bin/playwright --version 2>/dev/null || echo 'nicht installiert')"
-
-# Tests ausführen
-log "Starte Playwright Tests..."
-log "=========================================="
-
-# Führe das übergebene Kommando aus (default: npm test)
+# Execute the provided command (default: npm test)
+# tee writes output to stdout and the log file at the same time
 exec "$@" 2>&1 | tee -a "${LOG_FILE}"

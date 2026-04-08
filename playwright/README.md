@@ -1,175 +1,114 @@
 # OneCX Playwright E2E Tests
 
-Dieses Verzeichnis enthält Playwright E2E-Tests für die OneCX-Plattform, die in einem Docker-Container ausgeführt werden.
+This directory contains Playwright-based E2E tests for OneCX UI validation in Docker and CI environments.
 
-## Struktur
+## Structure
 
+```text
+playwright/
+├── harnesses/
+│   ├── base.harness.ts
+│   ├── keycloak-login.harness.ts
+│   ├── workspace-search.harness.ts
+│   └── index.ts
+├── tests/
+│   ├── auth.setup.ts
+│   └── workspace-management.spec.ts
+├── workspace.Dockerfile
+├── docker-entrypoint.sh
+├── playwright.config.ts
+├── config.env.example
+├── package.json
+└── tsconfig.json
 ```
-playwright_new/
-├── harnesses/                    # Page Object Harnesses
-│   ├── index.ts                  # Export aller Harnesses
-│   ├── keycloak-login.harness.ts # Keycloak Login-Seite
-│   └── workspace-search.harness.ts# Workspace Verwaltung
-├── tests/                        # Test-Dateien
-│   ├── auth.setup.ts             # Authentication Setup
-│   └── workspace-management.spec.ts# Workspace Tests
-├── Dockerfile.workspace          # Docker Image Definition
-├── docker-entrypoint.sh          # Container Entrypoint
-├── playwright.config.ts          # Playwright Konfiguration
-├── package.json                  # NPM Abhängigkeiten
-└── tsconfig.json                 # TypeScript Konfiguration
-```
 
-## Umgebungsvariablen
+## Environment Variables
 
-| Variable            | Beschreibung                                                                             | Default                                     |
-| ------------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------- |
-| `BASE_URL`          | Ziel-URL der Anwendung                                                                   | `http://proxy.localhost/onecx-shell/admin/` |
-| `KEYCLOAK_USER`     | Keycloak Benutzername                                                                    | `admin`                                     |
-| `KEYCLOAK_PASSWORD` | Keycloak Passwort                                                                        | `admin`                                     |
-| `OUTPUT_DIR`        | Verzeichnis für Test-Ergebnisse (im Container; Host: artefacts/runs/<runId>/e2e-results) | `/e2e-results`                              |
-| `RUN_ID`            | Lauf-ID für Artefaktpfad auf dem Host                                                    | `local`                                     |
-| `WAIT_FOR_URL`      | URL auf die gewartet werden soll (optional)                                              | -                                           |
+| Variable         | Description                               | Default                                              |
+| ---------------- | ----------------------------------------- | ---------------------------------------------------- |
+| `BASE_URL`       | Target application URL                    | `http://onecx.localhost/onecx-shell/admin/workspace` |
+| `ONECX_USER`     | Keycloak test username                    | `onecx`                                              |
+| `ONECX_PASSWORD` | Keycloak test password                    | `onecx`                                              |
+| `OUTPUT_DIR`     | Output directory for reports/artifacts    | `/e2e-results` in container                          |
+| `RUN_ID`         | Run identifier used in artifact pathing   | `local`                                              |
+| `CI`             | Enables CI behavior (retries, formatting) | `false`                                              |
 
-## Docker Image bauen
+Compatibility fallback is supported for `ONECX_USER` and `ONECX_PASSWORD`, but `ONECX_USER` and `ONECX_PASSWORD` are preferred.
+
+## Build Docker Image
 
 ```bash
-cd playwright_new
-docker build -f Dockerfile.workspace -t onecx-workspace-e2e:latest .
+docker build -f workspace.Dockerfile -t onecx-workspace-e2e:latest .
 ```
 
-## Container ausführen
+## Run Docker Container
 
-### Mit Host-Netzwerk (für lokale Entwicklung)
+### Host network (local)
 
 ```bash
 docker run --rm \
-  -e BASE_URL=http://proxy.localhost/onecx-shell/admin/ \
-  -e KEYCLOAK_USER=admin \
-  -e KEYCLOAK_PASSWORD=admin \
-  -e RUN_ID=local \
-  -v $(pwd)/artefacts/runs/local/e2e-results:/e2e-results \
+  -e BASE_URL=http://onecx.localhost/onecx-shell/admin/workspace \
+  -e ONECX_USER=onecx \
+  -e ONECX_PASSWORD=onecx \
+  -v $(pwd)/artifacts:/e2e-results \
   --network=host \
   onecx-workspace-e2e:latest
 ```
 
-### Mit Docker-Netzwerk
+### Docker network
 
 ```bash
 docker run --rm \
-  -e BASE_URL=http://proxy:80/onecx-shell/admin/ \
-  -e KEYCLOAK_USER=admin \
-  -e KEYCLOAK_PASSWORD=admin \
-  -e RUN_ID=local \
-  -v $(pwd)/artefacts/runs/local/e2e-results:/e2e-results \
+  -e BASE_URL=http://onecx-service:8080/onecx-shell/admin/workspace \
+  -e ONECX_USER=onecx \
+  -e ONECX_PASSWORD=onecx \
+  -v $(pwd)/artifacts:/e2e-results \
   --network=onecx-network \
   onecx-workspace-e2e:latest
 ```
 
-### Mit Wait-For-URL
-
-```bash
-docker run --rm \
-  -e BASE_URL=http://proxy.localhost/onecx-shell/admin/ \
-  -e WAIT_FOR_URL=http://proxy.localhost/onecx-shell/admin/ \
-  -e KEYCLOAK_USER=admin \
-  -e KEYCLOAK_PASSWORD=admin \
-  -e RUN_ID=local \
-  -v $(pwd)/artefacts/runs/local/e2e-results:/e2e-results \
-  --network=host \
-  onecx-workspace-e2e:latest
-```
-
-## Ergebnisse
-
-Nach der Ausführung werden folgende Dateien im `OUTPUT_DIR` (Standard: `artefacts/runs/<run-id>/e2e-results`) erstellt:
-
-```
-artefacts/runs/<run-id>/e2e-results/
-├── .auth/
-│   └── user.json                 # Gespeicherter Auth-State
-├── screenshots/
-│   ├── workspace-search-page.png # Vollseiten-Screenshot
-│   └── workspace-header.png      # Header-Screenshot
-├── test-artefacts/
-│   ├── *.webm                    # Video-Aufnahmen
-│   └── *.zip                     # Trace-Dateien
-├── playwright-report/
-│   └── index.html                # HTML Test-Report
-├── test-results.json             # JSON Test-Ergebnisse
-└── test-run.log                  # Ausführungs-Log
-```
-
-## Lokale Entwicklung
-
-### Installation
+## Local Development
 
 ```bash
 npm install
-npx playwright install chromium
-```
-
-### Tests lokal ausführen
-
-```bash
-# Alle Tests
 npm test
-
-# Mit Browser-UI
 npm run test:headed
-
-# Debug-Modus
 npm run test:debug
-
-# Report anzeigen
 npm run test:report
 ```
 
-## Harnesses
+### Linux without X server (Option B)
 
-Die Harnesses sind Page Object Models, die das Finden und Interagieren mit Elementen vereinfachen:
+If `npx playwright test --ui` fails with a `Browser.getVersion` / X server error,
+run headed/debug tests with `xvfb-run`.
 
-### KeycloakLoginHarness
+```bash
+sudo apt-get update && sudo apt-get install -y xvfb
 
-```typescript
-import { KeycloakLoginHarness } from './harnesses'
+ONECX_USER=onecx ONECX_PASSWORD=onecx BASE_URL=http://onecx.localhost/onecx-shell/admin/workspace \
+xvfb-run -a npm run test:headed
 
-const keycloak = new KeycloakLoginHarness(page)
-await keycloak.waitForPage()
-await keycloak.login('admin', 'admin')
+ONECX_USER=onecx ONECX_PASSWORD=onecx BASE_URL=http://onecx.localhost/onecx-shell/admin/workspace \
+xvfb-run -a npm run test:debug
 ```
 
-### WorkspaceSearchHarness
+Optional (UI mode via virtual display):
 
-```typescript
-import { WorkspaceSearchHarness } from './harnesses'
-
-const workspace = new WorkspaceSearchHarness(page)
-await workspace.waitForPage()
-
-// Header prüfen
-const title = await workspace.getPageTitle()
-const subtitle = await workspace.getPageSubtitle()
-
-// Workspaces anzeigen
-const names = await workspace.getWorkspaceNames()
-const count = await workspace.getWorkspaceCardCount()
+```bash
+ONECX_USER=onecx ONECX_PASSWORD=onecx BASE_URL=http://onecx.localhost/onecx-shell/admin/workspace \
+xvfb-run -a npx playwright test --ui
 ```
 
-## Integration mit Testcontainers
+## Artifacts
 
-Der Container ist so konzipiert, dass er mit der `E2eContainer` Klasse in `src/lib/containers/e2e/onecx-e2e.ts` verwendet werden kann:
+After execution, the output directory contains:
 
-```typescript
-import { E2eContainer } from './containers/e2e/onecx-e2e'
-
-const e2eContainer = new E2eContainer('onecx-workspace-e2e:latest')
-  .withBaseUrl('http://proxy:80/onecx-shell/admin/')
-  .withNetworkAliases(['workspace-e2e'])
-  .enableLogging(true)
-
-const started = await e2eContainer.start()
-const exitCode = await started.getExitCode()
-
-console.log(`E2E Tests beendet mit Exit-Code: ${exitCode}`)
+```text
+/e2e-results/
+├── .auth/user.json
+├── test-results.json
+├── playwright-report/index.html
+├── test-artifacts/
+├── screenshots/
+└── test-run.log
 ```

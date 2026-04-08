@@ -1,130 +1,135 @@
-import { test, expect } from '@playwright/test'
-import * as fs from 'fs'
-import { WorkspaceSearchHarness } from '../harnesses'
+import { test, expect } from "@playwright/test";
+import * as fs from "fs";
+import { WorkspaceSearchHarness } from "../harnesses";
 
 /**
- * E2E Tests für Workspace Management
+ * E2E tests for workspace management
  *
- * Diese Tests prüfen die Workspace-Verwaltungsseite:
- * - Seitenlayout und Header
- * - Breadcrumb-Navigation
- * - Workspace-Suche und -Liste
+ * These tests validate the workspace management page:
+ * - Page layout and header
+ * - Breadcrumb navigation
+ * - Workspace search and list
  * - Pagination
  */
 
-const artefactsRoot = process.env.artefacts_ROOT || './artefacts'
-const runId = process.env.RUN_ID || 'local'
-const outputDir = process.env.OUTPUT_DIR || `${artefactsRoot}/runs/${runId}/e2e-results`
+const artifactsRoot = process.env.artifacts_ROOT || "./artifacts";
+const runId = process.env.RUN_ID || "local";
+const outputDir =
+  process.env.OUTPUT_DIR || `${artifactsRoot}/runs/${runId}/e2e-results`;
 
-fs.mkdirSync(`${outputDir}/screenshots`, { recursive: true })
+fs.mkdirSync(`${outputDir}/screenshots`, { recursive: true });
 
-test.describe('Workspace Management', () => {
-  let workspaceHarness: WorkspaceSearchHarness
+test.describe("Workspace Management", () => {
+  let loggerName = "[Workspace Management]";
+  let workspaceHarness: WorkspaceSearchHarness;
 
-  test.beforeEach(async ({ page }) => {
-    workspaceHarness = new WorkspaceSearchHarness(page)
+  test.beforeEach(async ({ page, baseURL }) => {
+    workspaceHarness = new WorkspaceSearchHarness(page, loggerName);
 
-    // Navigiere zur Workspace-Seite (volle URL verwenden)
-    const baseUrl = process.env.BASE_URL || 'http://proxy.localhost/onecx-shell/admin/'
-    await page.goto(`${baseUrl}admin`)
+    // Navigate using baseURL from playwright.config.ts
+    if (!baseURL) {
+      throw new Error("baseURL is not configured in Playwright config.");
+    }
+    await workspaceHarness.navigateToWorkspace(baseURL);
 
-    // Warte auf domcontentloaded erst
-    await page.waitForLoadState('domcontentloaded')
+    // Wait for domcontentloaded
+    await workspaceHarness.waitForDomReady();
 
-    // Falls wir zu Keycloak weitergeleitet wurden, ist die Auth fehlgeschlagen
-    const currentUrl = page.url()
-    if (currentUrl.includes('/realms/')) {
-      throw new Error(`Auth fehlgeschlagen - wurde zu Keycloak geleitet: ${currentUrl}`)
+    // If we were redirected to Keycloak, authentication failed
+    if (workspaceHarness.isRedirectedToKeycloak()) {
+      throw new Error(
+        `Authentication failed - redirected to Keycloak: ${workspaceHarness.getCurrentUrl()}`,
+      );
     }
 
-    // Warte auf die Seite mit reduziertem Timeout
-    await workspaceHarness.waitForPage()
-  })
+    // Wait for page to be ready
+    await workspaceHarness.waitForPage();
+  });
 
-  test.describe('Page Header', () => {
-    test('sollte den korrekten Seitentitel anzeigen', async ({ page }) => {
-      const title = await workspaceHarness.getPageTitle()
-      expect(title).toBe('Workspace Verwaltung')
-    })
+  test.describe("Page Header", () => {
+    test("should display the expected page title", async () => {
+      const title = await workspaceHarness.getPageTitle();
+      expect(title).toBe("Workspace Management");
+    });
 
-    test('sollte den korrekten Untertitel anzeigen', async ({ page }) => {
-      const subtitle = await workspaceHarness.getPageSubtitle()
-      expect(subtitle).toBe('Erstellung und Bearbeitung von Workspaces')
-    })
+    test("should display the expected page subtitle", async () => {
+      const subtitle = await workspaceHarness.getPageSubtitle();
+      expect(
+        /^Creation and editing of Workspaces$/i.test(subtitle),
+      ).toBeTruthy();
+    });
 
-    test('sollte den Header sichtbar anzeigen', async ({ page }) => {
-      const isVisible = await workspaceHarness.isHeaderVisible()
-      expect(isVisible).toBe(true)
-    })
+    test("should show the page header", async () => {
+      const isVisible = await workspaceHarness.isHeaderVisible();
+      expect(isVisible).toBe(true);
+    });
 
-    test('sollte Action-Buttons in der Toolbar haben', async ({ page }) => {
-      const buttonCount = await workspaceHarness.getActionButtonCount()
-      expect(buttonCount).toBeGreaterThan(0)
-    })
-  })
+    test("should have action buttons in the toolbar", async () => {
+      const buttonCount = await workspaceHarness.getActionButtonCount();
+      expect(buttonCount > 0).toBeTruthy();
+    });
+  });
 
-  test.describe('Breadcrumb Navigation', () => {
-    test('sollte Breadcrumb anzeigen', async ({ page }) => {
-      const isVisible = await workspaceHarness.breadcrumb.isVisible()
-      expect(isVisible).toBe(true)
-    })
+  test.describe("Breadcrumb Navigation", () => {
+    test("should display breadcrumb", async () => {
+      const isVisible = await workspaceHarness.breadcrumb.isVisible();
+      expect(isVisible).toBe(true);
+    });
 
-    test('sollte Home-Link im Breadcrumb haben', async ({ page }) => {
-      const isVisible = await workspaceHarness.breadcrumbHome.isVisible()
-      expect(isVisible).toBe(true)
-    })
-  })
+    test("should contain a home link in breadcrumb", async () => {
+      const isVisible = await workspaceHarness.breadcrumbHome.isVisible();
+      expect(isVisible).toBe(true);
+    });
+  });
 
-  test.describe('Workspace Liste', () => {
-    test('sollte den DataView anzeigen', async ({ page }) => {
-      const isVisible = await workspaceHarness.isDataViewVisible()
-      expect(isVisible).toBe(true)
-    })
+  test.describe("Workspace List", () => {
+    test("should display DataView", async () => {
+      const isVisible = await workspaceHarness.isDataViewVisible();
+      expect(isVisible).toBe(true);
+    });
 
-    test('sollte mindestens einen Workspace anzeigen', async ({ page }) => {
-      await workspaceHarness.waitForSearchResults()
-      const count = await workspaceHarness.getWorkspaceCardCount()
-      expect(count).toBeGreaterThanOrEqual(1)
-    })
+    test("should display at least one workspace", async () => {
+      await workspaceHarness.waitForSearchResults();
+      const count = await workspaceHarness.getWorkspaceCardCount();
+      expect(count >= 1).toBeTruthy();
+    });
 
-    test('sollte Workspace-Namen anzeigen', async ({ page }) => {
-      await workspaceHarness.waitForSearchResults()
-      const names = await workspaceHarness.getWorkspaceNames()
-      expect(names.length).toBeGreaterThan(0)
-      console.log('Gefundene Workspaces:', names)
-    })
-  })
+    test("should display workspace names", async () => {
+      await workspaceHarness.waitForSearchResults();
+      const names = await workspaceHarness.getWorkspaceNames();
+      expect(names.length > 0).toBeTruthy();
+      console.log("Found workspaces:", names);
+    });
+  });
 
-  test.describe('Pagination', () => {
-    test('sollte Paginator anzeigen', async ({ page }) => {
-      const isVisible = await workspaceHarness.isPaginatorVisible()
-      expect(isVisible).toBe(true)
-    })
+  test.describe("Pagination", () => {
+    test("should display paginator", async () => {
+      const isVisible = await workspaceHarness.isPaginatorVisible();
+      expect(isVisible).toBe(true);
+    });
 
-    test('sollte Paginator-Info anzeigen', async ({ page }) => {
-      const info = await workspaceHarness.getPaginatorInfo()
-      expect(info).toMatch(/\d+\s*-\s*\d+\s*von\s*\d+/)
-    })
-  })
+    test("should display paginator info", async () => {
+      const info = await workspaceHarness.getPaginatorInfo();
+      expect(/\d+\s*-\s*\d+\s*(von|of)\s*\d+/i.test(info)).toBeTruthy();
+    });
+  });
 
-  test.describe('Screenshots und Dokumentation', () => {
-    test('sollte Screenshot der Workspace-Seite erstellen', async ({ page }) => {
-      // Warte auf vollständiges Laden
-      await page.waitForLoadState('networkidle')
-      await workspaceHarness.waitForSearchResults()
+  test.describe("Screenshots and Documentation", () => {
+    test("should create a screenshot of the workspace page", async () => {
+      // Wait for page load
+      await workspaceHarness.waitForPageFullyLoaded();
+      await workspaceHarness.waitForSearchResults();
 
-      // Screenshot erstellen
-      await page.screenshot({
-        path: `${outputDir}/screenshots/workspace-search-page.png`,
-        fullPage: true,
-      })
-    })
+      // Create screenshot
+      await workspaceHarness.captureFullPageScreenshot(
+        `${outputDir}/screenshots/workspace-search-page.png`,
+      );
+    });
 
-    test('sollte Screenshot des Headers erstellen', async ({ page }) => {
-      const header = workspaceHarness.pageHeader
-      await header.screenshot({
-        path: `${outputDir}/screenshots/workspace-header.png`,
-      })
-    })
-  })
-})
+    test("should create a screenshot of the header", async () => {
+      await workspaceHarness.captureHeaderScreenshot(
+        `${outputDir}/screenshots/workspace-header.png`,
+      );
+    });
+  });
+});
