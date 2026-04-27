@@ -4,17 +4,14 @@ import { defineConfig, devices } from '@playwright/test'
  * Playwright Konfiguration für OneCX E2E Tests
  *
  * Environment Variables:
- * - BASE_URL: Ziel-URL der Anwendung (z.B. http://proxy.localhost/onecx-shell/admin/)
- * - KEYCLOAK_USER: Benutzername für Keycloak Login (default: admin)
- * - KEYCLOAK_PASSWORD: Passwort für Keycloak Login (default: admin)
- * - OUTPUT_DIR: Verzeichnis für Test-Ergebnisse (default: ./artefacts/runs/<runId>/e2e-results or /e2e-results in container)
+ * - BASE_URL: Ziel-URL der Anwendung
+ * - KEYCLOAK_USER: Benutzername für Keycloak Login (default: onecx)
+ * - KEYCLOAK_PASSWORD: Passwort für Keycloak Login (default: onecx)
+ * - OUTPUT_DIR: Verzeichnis für Test-Ergebnisse (default: /e2e-results)
  */
 
 const baseURL = process.env.BASE_URL || 'http://proxy.localhost/onecx-shell/admin/'
-const artefactsRoot = process.env.artefacts_ROOT || './artefacts'
-const runId = process.env.RUN_ID || 'local'
-const defaultOutputDir = `${artefactsRoot}/runs/${runId}/e2e-results`
-const outputDir = process.env.OUTPUT_DIR || defaultOutputDir
+const outputDir = process.env.OUTPUT_DIR || '/e2e-results'
 
 export default defineConfig({
   // Test-Verzeichnis

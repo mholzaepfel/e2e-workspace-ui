@@ -5,18 +5,15 @@ import { KeycloakLoginHarness } from '../harnesses'
 /**
  * Authentication Setup für OneCX Tests
  *
- * Dieser Setup-Test loggt sich über Keycloak ein und speichert den
- * Authentication State für nachfolgende Tests.
+ * Loggt sich über Keycloak ein und speichert den Authentication State.
  *
  * Environment Variables:
- * - KEYCLOAK_USER: Benutzername (default: admin)
- * - KEYCLOAK_PASSWORD: Passwort (default: admin)
+ * - KEYCLOAK_USER: Benutzername (default: onecx)
+ * - KEYCLOAK_PASSWORD: Passwort (default: onecx)
  * - OUTPUT_DIR: Verzeichnis für Auth-State (default: /e2e-results)
  */
 
-const artefactsRoot = process.env.artefacts_ROOT || './artefacts'
-const runId = process.env.RUN_ID || 'local'
-const outputDir = process.env.OUTPUT_DIR || `${artefactsRoot}/runs/${runId}/e2e-results`
+const outputDir = process.env.OUTPUT_DIR || '/e2e-results'
 const authFile = `${outputDir}/.auth/user.json`
 
 fs.mkdirSync(`${outputDir}/.auth`, { recursive: true })
@@ -24,7 +21,7 @@ fs.mkdirSync(`${outputDir}/.auth`, { recursive: true })
 setup('Keycloak Authentication', async ({ page }) => {
   const username = process.env.KEYCLOAK_USER || 'onecx'
   const password = process.env.KEYCLOAK_PASSWORD || 'onecx'
-  const baseURL = process.env.BASE_URL || 'http://proxy.localhost/onecx-shell/admin/'
+  const baseURL = process.env.BASE_URL || 'http://onecx.localhost/onecx-shell/'
 
   console.log(`[Auth Setup] Navigiere zu: ${baseURL}`)
   console.log(`[Auth Setup] Benutzer: ${username}`)

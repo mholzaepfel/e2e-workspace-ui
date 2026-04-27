@@ -12,9 +12,7 @@ import { WorkspaceSearchHarness } from '../harnesses'
  * - Pagination
  */
 
-const artefactsRoot = process.env.artefacts_ROOT || './artefacts'
-const runId = process.env.RUN_ID || 'local'
-const outputDir = process.env.OUTPUT_DIR || `${artefactsRoot}/runs/${runId}/e2e-results`
+const outputDir = process.env.OUTPUT_DIR || '/e2e-results'
 
 fs.mkdirSync(`${outputDir}/screenshots`, { recursive: true })
 
