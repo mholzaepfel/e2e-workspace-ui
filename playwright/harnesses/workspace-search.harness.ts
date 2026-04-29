@@ -22,10 +22,14 @@ export class WorkspaceSearchHarness {
   readonly breadcrumb: Locator
   readonly breadcrumbHome: Locator
   readonly breadcrumbItems: Locator
+  readonly breadcrumbHomeLink: Locator
+  readonly breadcrumbWorkspaceLink: Locator
 
   // Action Buttons (Toolbar)
   readonly toolbar: Locator
   readonly actionButtons: Locator
+  readonly createButton: Locator
+  readonly importButton: Locator
 
   // DataView / Search Results
   readonly dataView: Locator
@@ -66,10 +70,15 @@ export class WorkspaceSearchHarness {
     this.breadcrumb = page.locator('p-breadcrumb')
     this.breadcrumbHome = page.locator('.p-breadcrumb-home')
     this.breadcrumbItems = page.locator('.p-breadcrumb-list li.p-element')
+    this.breadcrumbHomeLink = page.locator('.p-breadcrumb-home a')
+    this.breadcrumbWorkspaceLink = page.locator('.p-breadcrumb-list li[data-pc-section="menuitem"] a')
 
     // Toolbar / Actions
     this.toolbar = page.locator('.toolbar')
     this.actionButtons = page.locator('.action-button')
+    // Specific toolbar buttons via icon class (locale-invariant selectors)
+    this.createButton = page.locator('.toolbar button:has(.pi-plus)')
+    this.importButton = page.locator('.toolbar button:has(.pi-upload)')
 
     // DataView
     this.dataView = page.locator('#ws_search_dataview')
@@ -219,5 +228,36 @@ export class WorkspaceSearchHarness {
    */
   async waitForSearchResults(): Promise<void> {
     await this.searchResults.waitFor({ state: 'visible', timeout: 30000 })
+  }
+
+  /**
+   * Returns the visible label text of the create button.
+   * Use with t('create_button_label') for locale-aware assertions.
+   */
+  async getCreateButtonLabel(): Promise<string> {
+    return (await this.createButton.locator('.p-button-label').innerText()).trim()
+  }
+
+  /**
+   * Returns the visible label text of the import button.
+   * Use with t('import_button_label') for locale-aware assertions.
+   */
+  async getImportButtonLabel(): Promise<string> {
+    return (await this.importButton.locator('.p-button-label').innerText()).trim()
+  }
+
+  /**
+   * Returns the href attribute of the breadcrumb home link.
+   */
+  async getBreadcrumbHomeHref(): Promise<string | null> {
+    return this.breadcrumbHomeLink.getAttribute('href')
+  }
+
+  /**
+   * Returns the text of the last breadcrumb workspace link.
+   * Use with t('breadcrumb_workspace') for locale-aware assertions.
+   */
+  async getBreadcrumbWorkspaceText(): Promise<string> {
+    return (await this.breadcrumbWorkspaceLink.last().innerText()).trim()
   }
 }

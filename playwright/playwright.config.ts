@@ -1,4 +1,4 @@
-import { defineConfig, devices } from '@playwright/test'
+import { defineConfig, devices } from "@playwright/test";
 
 /**
  * Playwright Konfiguration für OneCX E2E Tests
@@ -9,13 +9,18 @@ import { defineConfig, devices } from '@playwright/test'
  * - KEYCLOAK_PASSWORD: Passwort für Keycloak Login (default: onecx)
  * - OUTPUT_DIR: Verzeichnis für Test-Ergebnisse (default: /e2e-results)
  */
-
-const baseURL = process.env.BASE_URL || 'http://proxy.localhost/onecx-shell/admin/'
-const outputDir = process.env.OUTPUT_DIR || '/e2e-results'
+if (process.env.CI && !process.env.BASE_URL) {
+  throw new Error(
+    "[playwright.config] BASE_URL is not set. Pass -e BASE_URL=http://<host>:<port>/... to the container.",
+  );
+}
+const baseURL =
+  process.env.BASE_URL || "http://onecx.localhost/onecx-shell/admin/workspace";
+const outputDir = process.env.OUTPUT_DIR || "/e2e-results";
 
 export default defineConfig({
   // Test-Verzeichnis
-  testDir: './tests',
+  testDir: "./tests",
 
   // Globales Setup für Authentication
   globalSetup: undefined,
@@ -29,9 +34,10 @@ export default defineConfig({
 
   // Reporter für Ausgabe
   reporter: [
-    ['html', { outputFolder: `${outputDir}/playwright-report`, open: 'never' }],
-    ['json', { outputFile: `${outputDir}/test-results.json` }],
-    ['list'],
+    ["html", { outputFolder: `${outputDir}/playwright-report`, open: "never" }],
+    ["json", { outputFile: `${outputDir}/test-results.json` }],
+    ["junit", { outputFile: `${outputDir}/test-results.xml` }],
+    ["list"],
   ],
 
   // Globale Timeouts
@@ -49,16 +55,19 @@ export default defineConfig({
     baseURL,
 
     // Tracing aktivieren (on-first-retry oder always)
-    trace: 'on',
+    trace: "on",
 
     // Screenshots bei Fehlern
-    screenshot: 'on',
+    screenshot: "on",
 
     // Video-Aufnahme
-    video: 'on',
+    video: "on",
 
-    // Network-Logs sammeln (HAR-Datei)
-    // HAR wird durch trace bereits erfasst
+    // HAR recording — captures all network traffic for every test run
+    recordHar: {
+      path: `${outputDir}/network-har/requests.har`,
+      urlFilter: /.*/,
+    },
 
     // Viewport
     viewport: { width: 1920, height: 1080 },
@@ -73,35 +82,41 @@ export default defineConfig({
     ignoreHTTPSErrors: true,
 
     // Locale für Tests
-    locale: 'de-DE',
+    locale: "de-DE",
 
     // Timezone
-    timezoneId: 'Europe/Berlin',
+    timezoneId: "Europe/Berlin",
   },
 
   // Projekte / Browser
   projects: [
     // Setup-Projekt für Authentication
     {
-      name: 'setup',
+      name: "setup",
       testMatch: /.*\.setup\.ts/,
       use: {
-        ...devices['Desktop Chrome'],
+        ...devices["Desktop Chrome"],
+        launchOptions: {
+          args: ["--disable-web-security"],
+        },
       },
     },
 
     // Hauptprojekt mit Chrome
     {
-      name: 'chromium',
+      name: "chromium",
       use: {
-        ...devices['Desktop Chrome'],
+        ...devices["Desktop Chrome"],
         // Authentication State von Setup verwenden
         storageState: `${outputDir}/.auth/user.json`,
+        launchOptions: {
+          args: ["--disable-web-security"],
+        },
       },
-      dependencies: ['setup'],
+      dependencies: ["setup"],
     },
   ],
 
   // Web Server nicht starten (wird extern bereitgestellt)
   webServer: undefined,
-})
+});
